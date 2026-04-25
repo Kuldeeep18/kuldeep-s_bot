@@ -48,6 +48,8 @@ async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState("auth_info");
   const { version, isLatest } = await fetchLatestBaileysVersion();
   logger.info(`Using Baileys v${version.join(".")}, Latest: ${isLatest}`);
+  const historySyncEnabled = config.bot?.history ?? false;
+  const markOnlineOnConnect = config.bot?.online ?? true;
 
   const sock = makeWASocket({
     version,
@@ -56,9 +58,9 @@ async function startBot() {
     logger: pino({ level: 'silent' }),
     browser: ["NexosBot", "Opera GX", "120.0.5543.204"],
     generateHighQualityLinkPreview: true,
-    markOnlineOnConnect: config.bot?.online || true,
-    syncFullHistory: config.bot?.history || false,
-    shouldSyncHistoryMessage: config.bot?.history || false,
+    markOnlineOnConnect,
+    syncFullHistory: historySyncEnabled,
+    shouldSyncHistoryMessage: () => historySyncEnabled,
   });
 
   // Save login credentials on update

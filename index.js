@@ -45,7 +45,8 @@ for (const file of eventFiles) {
  * Starts the WhatsApp bot and registers event handlers.
  */
 async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState("auth_info");
+  const authPath = config.auth?.path || "auth_info";
+  const { state, saveCreds } = await useMultiFileAuthState(authPath);
   const { version, isLatest } = await fetchLatestBaileysVersion();
   logger.info(`Using Baileys v${version.join(".")}, Latest: ${isLatest}`);
   const historySyncEnabled = config.bot?.history ?? false;
@@ -70,7 +71,14 @@ async function startBot() {
   for (const { eventName, handler } of eventHandlers) {
     // Pass only the dependencies that the handler expects
     if (eventName === "connection.update") {
-      sock.ev.on(eventName, handler(sock, logger, saveCreds, startBot));
+      sock.ev.on(
+        eventName,
+        handler(sock, logger, saveCreds, startBot, {
+          authPath,
+          autoResetOnLogout: config.auth?.autoResetOnLogout ?? false,
+          restartDelayMs: config.auth?.restartDelayMs ?? 3000,
+        })
+      );
     } else if (eventName === "messages.upsert") {
       sock.ev.on(eventName, handler(sock, logger, commands));
     } else {

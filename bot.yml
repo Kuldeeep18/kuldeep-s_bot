@@ -7,6 +7,10 @@ bot:
   online: true                  # Should the bot appear online?
   prefix: ">"                   # Command prefix (e.g., !, >, /)
   history: false                # Enable/disable chat history
+  deviceName: "KuldeepBot"      # Name shown in WhatsApp linked devices
+  browserName: "Chrome"         # Browser label shown by WhatsApp
+  browserVersion: "120.0.0.0"   # Browser version label shown by WhatsApp
+  imageUrl: ""                   # Optional URL for >image command (blank disables external image fetch)
 
 # =====================
 # Logging
@@ -22,6 +26,18 @@ auth:
   path: "auth_info"            # Folder where Baileys stores auth state
   autoResetOnLogout: true       # On 401, remove stale auth and restart once
   restartDelayMs: 3000          # Delay before restart after disconnect/reset
+  maxReplacedReconnects: 2      # Max consecutive 440 reconnect attempts before stopping loop
+
+# =====================
+# Command API (OpenRouter)
+# =====================
+# The bot automatically uses OpenRouter AI to generate intelligent command replies.
+# Requires OPENROUTER_API_KEY to be set in .env file.
+api:
+  enabled: true                 # Enable AI-based command replies
+  url: "https://openrouter.ai/api/v1/chat/completions"
+  timeoutMs: 20000              # API timeout in milliseconds
+# API key and model are loaded from .env, not from this file
 
 # =====================
 # Advanced/Experimental

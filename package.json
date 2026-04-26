@@ -23,6 +23,7 @@
   "dependencies": {
     "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^6.7.18",
+    "dotenv": "^17.4.2",
     "js-yaml": "^4.1.1",
     "pino": "^9.7.0",
     "qrcode": "^1.5.4",

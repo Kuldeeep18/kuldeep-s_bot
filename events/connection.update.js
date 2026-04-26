@@ -40,6 +40,21 @@ function resetAuthState(authPath, logger) {
   }
 }
 
+async function scheduleRestart(startBot, delayMs, logger) {
+  if (reconnectInProgress) {
+    logger.warn("Reconnect already scheduled. Skipping duplicate restart request.");
+    return;
+  }
+
+  reconnectInProgress = true;
+  try {
+    await delay(delayMs);
+    await startBot();
+  } finally {
+    reconnectInProgress = false;
+  }
+}
+
 module.exports = {
   eventName: "connection.update",
   /**
@@ -48,9 +63,9 @@ module.exports = {
    * @param {object} logger - Logger for logging info and errors.
    * @param {Function} saveCreds - Function to save credentials.
    * @param {Function} startBot - Function to restart the bot if needed.
-  * @param {object} options - Auth and recovery settings.
-  * @returns {Function}
-  */
+   * @param {object} options - Auth and recovery settings.
+   * @returns {Function}
+   */
   handler: (sock, logger, saveCreds, startBot, options = {}) => async ({ connection, lastDisconnect, qr }) => {
     if (typeof options.isCurrentSocket === "function" && !options.isCurrentSocket()) {
       return;
@@ -72,7 +87,7 @@ module.exports = {
       const reasonCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
       const isLoggedOut = reasonCode === DisconnectReason.loggedOut;
       const isReplaced = reasonCode === DisconnectReason.connectionReplaced;
-      const shouldReconnect = !isLoggedOut;
+      const shouldReconnect = reasonCode !== DisconnectReason.loggedOut;
       logger.warn(`Connection closed. Code: ${reasonCode}. Reconnecting? ${shouldReconnect}`);
 
       if (isReplaced) {

@@ -1,19 +1,12 @@
+const config = require("../utils");
 
-/**
- * Returns the current server time in a user-friendly format.
- * Usage: !time
- */
 module.exports = {
   name: "time",
   description: "Get the current server time.",
-  /**
-   * Sends the current server time to the user.
-   * @param {object} sock - WhatsApp socket instance
-   * @param {string} from - Sender JID
-   * @param {Array} args - Command arguments
-   */
-  execute: async (sock, from, args) => {
-    const now = new Date().toLocaleString();
+  async execute(sock, from) {
+    const locale = config.bot?.locale || undefined;
+    const timeZone = config.bot?.timezone || undefined;
+    const now = new Date().toLocaleString(locale, timeZone ? { timeZone } : undefined);
     await sock.sendMessage(from, { text: `Current server time: ${now}` });
-  }
+  },
 };

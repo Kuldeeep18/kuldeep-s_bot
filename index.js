@@ -1,3 +1,5 @@
+require("dotenv").config({ quiet: true });
+
 /**
  * WhatsApp Bot Entry Point
  * Loads config, commands, events, and starts the bot.
@@ -12,21 +14,11 @@ const fs = require("fs");
 const path = require("path");
 const pino = require("pino");
 const config = require("./utils");
+const { commands } = require("./commands/command-registry");
 
-// Logging via pino
 const logger = pino({
   level: config.logging?.level || "info",
   transport: { target: "pino-pretty" },
-});
-
-/**
- * Loads all command modules from the commands directory.
- * @returns {Map}
- */
-const commands = new Map();
-fs.readdirSync("./commands").forEach((file) => {
-  const cmd = require(`./commands/${file}`);
-  commands.set(cmd.name, cmd);
 });
 
 let activeSocket = null;
@@ -43,13 +35,17 @@ function isProcessRunning(pid) {
     process.kill(pid, 0);
     return true;
   } catch (err) {
-    if (err?.code === "EPERM") return true;
+    if (err?.code === "EPERM") {
+      return true;
+    }
     return false;
   }
 }
 
 function releaseSingleInstanceLock() {
-  if (!lockAcquired) return;
+  if (!lockAcquired) {
+    return;
+  }
 
   try {
     const existingPid = parsePid(fs.readFileSync(lockFilePath, "utf8"));
@@ -64,7 +60,9 @@ function releaseSingleInstanceLock() {
 }
 
 function acquireSingleInstanceLock() {
-  if (lockAcquired) return true;
+  if (lockAcquired) {
+    return true;
+  }
 
   try {
     fs.writeFileSync(lockFilePath, String(process.pid), { flag: "wx" });
@@ -79,7 +77,9 @@ function acquireSingleInstanceLock() {
     try {
       const existingPid = parsePid(fs.readFileSync(lockFilePath, "utf8"));
       if (existingPid && isProcessRunning(existingPid)) {
-        logger.error(`Another bot process is already running (PID ${existingPid}). Stop it before starting another instance.`);
+        logger.error(
+          `Another bot process is already running (PID ${existingPid}). Stop it before starting another instance.`
+        );
         return false;
       }
 
@@ -134,11 +134,7 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGBREAK"]) {
   });
 }
 
-/**
- * Loads all event handler modules from the events directory.
- * @returns {Array}
- */
-const eventFiles = fs.readdirSync("./events").filter((f) => f.endsWith(".js"));
+const eventFiles = fs.readdirSync("./events").filter((file) => file.endsWith(".js"));
 const eventHandlers = [];
 for (const file of eventFiles) {
   const eventModule = require(`./events/${file}`);
@@ -147,14 +143,12 @@ for (const file of eventFiles) {
   }
 }
 
-/**
- * Starts the WhatsApp bot and registers event handlers.
- */
 async function startBot() {
   const authPath = config.auth?.path || "auth_info";
   const { state, saveCreds } = await useMultiFileAuthState(authPath);
   const { version, isLatest } = await fetchLatestBaileysVersion();
   logger.info(`Using Baileys v${version.join(".")}, Latest: ${isLatest}`);
+
   const historySyncEnabled = config.bot?.history ?? false;
   const markOnlineOnConnect = config.bot?.online ?? true;
   const deviceName = config.bot?.deviceName || config.bot?.name || "WhatsApp Bot";
@@ -174,12 +168,9 @@ async function startBot() {
   });
   activeSocket = sock;
 
-  // Save login credentials on update
   sock.ev.on("creds.update", saveCreds);
 
-  // Register all event handlers
   for (const { eventName, handler } of eventHandlers) {
-    // Pass only the dependencies that the handler expects
     if (eventName === "connection.update") {
       sock.ev.on(
         eventName,
@@ -193,13 +184,24 @@ async function startBot() {
           isCurrentSocket: () => activeSocket === sock,
         })
       );
-    } else if (eventName === "messages.upsert") {
-      sock.ev.on(eventName, handler(sock, logger, commands));
-    } else {
-      // For future extensibility, just pass sock and logger
-      sock.ev.on(eventName, handler(sock, logger));
+      continue;
     }
+
+    if (eventName === "messages.upsert") {
+      sock.ev.on(eventName, handler(sock, logger, commands));
+      continue;
+    }
+
+    sock.ev.on(eventName, handler(sock, logger));
   }
 }
 
-startBot();
+if (!acquireSingleInstanceLock()) {
+  process.exit(1);
+}
+
+startBot().catch((err) => {
+  logger.error({ err }, "Failed to start bot");
+  releaseSingleInstanceLock();
+  process.exit(1);
+});

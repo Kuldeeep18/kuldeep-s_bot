@@ -9,6 +9,19 @@ const fs = require("fs");
 const path = require("path");
 
 let autoResetAttempted = false;
+let reconnectInProgress = false;
+let replacedCloseTimestamps = [];
+
+function trackReplacedWindow(windowMs) {
+  const now = Date.now();
+  replacedCloseTimestamps.push(now);
+  replacedCloseTimestamps = replacedCloseTimestamps.filter((ts) => now - ts <= windowMs);
+  return replacedCloseTimestamps.length;
+}
+
+function clearReplacedWindow() {
+  replacedCloseTimestamps = [];
+}
 
 function resolveAuthPath(authPath) {
   if (path.isAbsolute(authPath)) return authPath;
@@ -35,13 +48,20 @@ module.exports = {
    * @param {object} logger - Logger for logging info and errors.
    * @param {Function} saveCreds - Function to save credentials.
    * @param {Function} startBot - Function to restart the bot if needed.
-   * @param {object} options - Auth and recovery settings.
-   * @returns {Function}
-   */
+  * @param {object} options - Auth and recovery settings.
+  * @returns {Function}
+  */
   handler: (sock, logger, saveCreds, startBot, options = {}) => async ({ connection, lastDisconnect, qr }) => {
+    if (typeof options.isCurrentSocket === "function" && !options.isCurrentSocket()) {
+      return;
+    }
+
     const authPath = options.authPath || "auth_info";
     const autoResetOnLogout = options.autoResetOnLogout ?? false;
     const restartDelayMs = options.restartDelayMs ?? 3000;
+    const maxReplacedReconnects = options.maxReplacedReconnects ?? 3;
+    const replacedWindowMs = options.replacedWindowMs ?? 120000;
+    const replacedReconnectDelayMs = options.replacedReconnectDelayMs ?? Math.max(8000, restartDelayMs);
 
     if (qr) {
       logger.info("Scan the QR below to login:");
@@ -50,27 +70,45 @@ module.exports = {
 
     if (connection === "close") {
       const reasonCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
-      const shouldReconnect = reasonCode !== DisconnectReason.loggedOut;
+      const isLoggedOut = reasonCode === DisconnectReason.loggedOut;
+      const isReplaced = reasonCode === DisconnectReason.connectionReplaced;
+      const shouldReconnect = !isLoggedOut;
       logger.warn(`Connection closed. Code: ${reasonCode}. Reconnecting? ${shouldReconnect}`);
 
-      if (shouldReconnect) {
-        await delay(restartDelayMs);
-        startBot();
-        return;
-      }
+      if (isReplaced) {
+        const replacedInWindow = trackReplacedWindow(replacedWindowMs);
+        logger.warn(
+          `Session replaced (440). Replacements in last ${Math.round(replacedWindowMs / 1000)}s: ${replacedInWindow}`
+        );
 
-      if (autoResetOnLogout && !autoResetAttempted) {
-        autoResetAttempted = true;
-        logger.error("Logged out (401). Resetting local auth state and restarting for re-authentication.");
-        const cleared = resetAuthState(authPath, logger);
-        if (cleared) {
-          await delay(restartDelayMs);
-          startBot();
+        if (replacedInWindow > maxReplacedReconnects) {
+          logger.error(
+            `Too many 440 disconnects (${replacedInWindow}) in a short time window. Stopping auto-reconnect.`
+          );
+          logger.error("This usually means another bot session is active with the same account.");
+          logger.error("Close other bot processes/devices, then restart this bot once.");
           return;
         }
       }
 
-      if (autoResetOnLogout && autoResetAttempted) {
+      if (shouldReconnect) {
+        const reconnectDelay = isReplaced ? replacedReconnectDelayMs : restartDelayMs;
+        await scheduleRestart(startBot, reconnectDelay, logger);
+        return;
+      }
+
+      if (autoResetOnLogout && isLoggedOut && !autoResetAttempted) {
+        autoResetAttempted = true;
+        logger.error("Logged out (401). Resetting local auth state and restarting for re-authentication.");
+        const cleared = resetAuthState(authPath, logger);
+        if (cleared) {
+          clearReplacedWindow();
+          await scheduleRestart(startBot, restartDelayMs, logger);
+          return;
+        }
+      }
+
+      if (autoResetOnLogout && isLoggedOut && autoResetAttempted) {
         logger.error("Logged out again after auth reset. Re-authenticate manually.");
         logger.error(`Delete ${authPath} and start the bot again to scan a new QR.`);
       } else {
@@ -78,6 +116,7 @@ module.exports = {
       }
     } else if (connection === "open") {
       autoResetAttempted = false;
+      reconnectInProgress = false;
       logger.info("Connected to WhatsApp");
     }
   }

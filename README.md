@@ -109,14 +109,6 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 
 ---
 
-## 📬 Contact & Community
 
-💬 Join us on **Discord**: [Click Here](https://discord.gg/H7pVc9aUK2)  
-🐦 **Follow on Twitter**: [@nexoslabs](https://twitter.com/nexoslabs)  
-📧 **Email**: [contact@nexoscreation.tech](mailto:contact@nexoscreation.tech)
 
-If you find this project helpful, please consider **starring ⭐ the repository** or **sponsoring 💖 on GitHub**!
 
-<p align="center">
-  Created with ❤️ by <a href="https://github.com/nexoslabs">@nexoslabs</a>
-</p>
